@@ -1,21 +1,36 @@
 import anthropic
 import openai
-from typing import List, Dict, AsyncGenerator, Optional
+from typing import List, Dict, AsyncGenerator, Optional, Union
 import logging
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_SYSTEM_PROMPT = (
+    "You are a helpful AI assistant in a real-time avatar conversation system. "
+    "Keep replies concise and conversational so they can be spoken aloud."
+)
+
+
+def _cacheable_system(system_prompt: Optional[str]) -> list[dict]:
+    """
+    Build a system block list with prompt-cache marking applied to the (long-lived)
+    system prompt. Anthropic SDK accepts either a plain string OR a list of blocks;
+    blocks are needed to attach `cache_control` per-block.
+    """
+    text = system_prompt or DEFAULT_SYSTEM_PROMPT
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
 
 class LLMService:
     """LLM Service for AI responses"""
-    
+
     def __init__(self):
         self.provider = settings.LLM_PROVIDER
         self.model = settings.LLM_MODEL
         self.temperature = settings.LLM_TEMPERATURE
         self.max_tokens = settings.LLM_MAX_TOKENS
-        
+
         if self.provider == "anthropic":
             self.client = anthropic.AsyncAnthropic(
                 api_key=settings.ANTHROPIC_API_KEY
@@ -54,16 +69,24 @@ class LLMService:
                 model=self.model,
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
-                system=system_prompt or "You are a helpful AI assistant in an avatar conversation system.",
+                # Pass system as a block list so we can attach cache_control to it.
+                # Repeat avatar sessions share the same system prompt → cache hit
+                # makes subsequent reads ~10% the cost of fresh input.
+                system=_cacheable_system(system_prompt),
                 messages=messages,
-                # Auto-cache the largest cacheable prefix (system + early conversation).
-                # Cache reads cost ~10% of base input — substantial savings for repeat
-                # avatar sessions that share a system prompt.
-                cache_control={"type": "ephemeral"},
             )
 
             if not response.content or not hasattr(response.content[0], "text"):
                 raise ValueError("Unexpected response structure from Anthropic API")
+            try:
+                u = response.usage
+                logger.info(
+                    f"LLM usage: in={u.input_tokens} out={u.output_tokens} "
+                    f"cache_create={getattr(u, 'cache_creation_input_tokens', 0)} "
+                    f"cache_read={getattr(u, 'cache_read_input_tokens', 0)}"
+                )
+            except Exception:
+                pass
             return response.content[0].text
 
         except Exception as e:
@@ -123,9 +146,8 @@ class LLMService:
                 model=self.model,
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
-                system=system_prompt or "You are a helpful AI assistant.",
+                system=_cacheable_system(system_prompt),
                 messages=messages,
-                cache_control={"type": "ephemeral"},
             ) as stream:
                 async for text in stream.text_stream:
                     yield text

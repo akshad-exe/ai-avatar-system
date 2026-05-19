@@ -77,7 +77,7 @@ async def list_sessions(
             .where(Session.user_id == _user_id(current_user))
             .offset(skip)
             .limit(limit)
-            .order_by(Session.created_at.desc())
+            .order_by(Session.started_at.desc())
         )
         return result.scalars().all()
     except Exception as e:
