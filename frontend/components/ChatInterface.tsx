@@ -434,6 +434,22 @@ export function ChatInterface({ avatarId, voiceId, onSessionCreated }: ChatInter
         toast(data.message, { icon: '⚠️', duration: 5000 })
         break
 
+      case 'interrupted':
+        // Backend cancelled the previous turn because the user spoke again
+        // (barge-in). Stop playback, clear the buffer, and let the new turn
+        // start cleanly. We don't show a toast — barge-in should be silent.
+        chunkQueueRef.current = []
+        isPlayingRef.current = false
+        setShowVideo(false)
+        if (videoRef.current) {
+          videoRef.current.pause()
+          videoRef.current.src = ''
+        }
+        setIsProcessing(false)
+        setIsTyping(false)
+        setStreamingContent('')
+        break
+
       case 'pong':
         break
     }

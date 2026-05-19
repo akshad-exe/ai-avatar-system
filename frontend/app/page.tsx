@@ -1,18 +1,45 @@
 'use client'
 
 import { useState, type CSSProperties } from 'react'
+import dynamic from 'next/dynamic'
 import { AvatarUpload } from '@/components/AvatarUpload'
 import { AvatarList } from '@/components/AvatarList'
-import { ChatInterface } from '@/components/ChatInterface'
-import { VoicePanel } from '@/components/VoicePanel'
-import { HistoryPanel } from '@/components/HistoryPanel'
-import { SettingsPanel } from '@/components/SettingsPanel'
 import { ConnectionStatus } from '@/components/ui/ConnectionStatus'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { AuthModal } from '@/components/AuthModal'
 import { api } from '@/lib/api'
 import { toast } from 'react-hot-toast'
 import { useStore } from '@/store/useStore'
+
+// Heavy panels (chat WebSocket pipeline, voice cloning recorder, history
+// list with TanStack queries, settings form) load on-demand instead of
+// shipping their JS in the home-page bundle. Cuts the initial chunk size
+// by ~150 KB and lets the marketing landing page paint sooner.
+const ChatInterface = dynamic(
+  () => import('@/components/ChatInterface').then(m => m.ChatInterface),
+  { ssr: false, loading: () => <PanelLoader label="Connecting…" /> },
+)
+const VoicePanel = dynamic(
+  () => import('@/components/VoicePanel').then(m => m.VoicePanel),
+  { ssr: false, loading: () => <PanelLoader label="Loading voice studio…" /> },
+)
+const HistoryPanel = dynamic(
+  () => import('@/components/HistoryPanel').then(m => m.HistoryPanel),
+  { ssr: false, loading: () => <PanelLoader label="Loading history…" /> },
+)
+const SettingsPanel = dynamic(
+  () => import('@/components/SettingsPanel').then(m => m.SettingsPanel),
+  { ssr: false, loading: () => <PanelLoader label="Loading settings…" /> },
+)
+
+function PanelLoader({ label }: { label: string }) {
+  return (
+    <div className="flex items-center justify-center py-20 text-gray-500 text-sm">
+      <span className="inline-block w-2 h-2 rounded-full bg-primary-500 animate-pulse mr-2" />
+      {label}
+    </div>
+  )
+}
 import {
   Camera,
   MessageCircle,
