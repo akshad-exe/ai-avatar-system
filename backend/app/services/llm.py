@@ -108,8 +108,23 @@ class LLMService:
 
         if self.provider == "anthropic":
             self.client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        elif self.provider == "ollama":
+            # Ollama (and vLLM / LM Studio / OpenRouter) speak the OpenAI
+            # wire protocol — reuse the OpenAI client against their base URL.
+            # Fully local and free; no API key required (the client insists
+            # on a non-empty string, so we pass a placeholder).
+            base_url = settings.OPENAI_BASE_URL or "http://localhost:11434/v1"
+            self.client = openai.AsyncOpenAI(
+                api_key=settings.OPENAI_API_KEY or "ollama",
+                base_url=base_url,
+            )
+            self.provider = "openai"  # downstream code paths are identical
+            logger.info(f"LLM provider 'ollama' → OpenAI-compatible client at {base_url}")
         elif self.provider == "openai":
-            self.client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            self.client = openai.AsyncOpenAI(
+                api_key=settings.OPENAI_API_KEY,
+                base_url=settings.OPENAI_BASE_URL,  # None → api.openai.com
+            )
 
     # ── non-streaming ────────────────────────────────────────────────────────
 

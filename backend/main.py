@@ -237,6 +237,11 @@ async def health_check():
         services["llm"] = "ready (openai)" if settings.OPENAI_API_KEY else "missing OPENAI_API_KEY"
         if not settings.OPENAI_API_KEY:
             health["status"] = "degraded"
+    elif settings.LLM_PROVIDER == "ollama":
+        # Local OpenAI-compatible server — no API key needed.
+        services["llm"] = (
+            f"ready (ollama @ {settings.OPENAI_BASE_URL or 'http://localhost:11434/v1'})"
+        )
     else:
         services["llm"] = f"unknown provider: {settings.LLM_PROVIDER}"
         health["status"] = "degraded"

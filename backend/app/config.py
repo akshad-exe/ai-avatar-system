@@ -47,11 +47,18 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ELEVENLABS_API_KEY: Optional[str] = None
 
+    # Point the OpenAI-compatible client at a different server — Ollama
+    # (http://localhost:11434/v1), vLLM, LM Studio, OpenRouter, etc.
+    # Used when LLM_PROVIDER is "openai" or "ollama".
+    OPENAI_BASE_URL: Optional[str] = None
+
     # LLM Configuration
     # Anthropic models (2026): claude-opus-4-7 (most capable), claude-sonnet-4-6
     # (balanced — current default), claude-haiku-4-5 (fastest). OpenAI users
     # should override LLM_MODEL via .env (e.g. gpt-4o, gpt-4o-mini).
-    LLM_PROVIDER: str = "anthropic"  # anthropic, openai
+    # "ollama" runs fully local & free: set LLM_MODEL to e.g. llama3.1 and
+    # optionally OPENAI_BASE_URL (defaults to http://localhost:11434/v1).
+    LLM_PROVIDER: str = "anthropic"  # anthropic, openai, ollama
     LLM_MODEL: str = "claude-sonnet-4-6"
     LLM_TEMPERATURE: float = 0.7
     LLM_MAX_TOKENS: int = 2000
