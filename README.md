@@ -31,8 +31,8 @@
   <a href="#-roadmap">Roadmap</a>
 </p>
 
-> **The most complete open-source AI talking avatar system.**
-> Real-time lip-sync · Zero-shot voice cloning · Multi-LLM · Runs 100% locally or on AWS.
+> **The most complete open-source AI avatar / digital human system.**
+> Real-time talking-head lip-sync · Zero-shot voice cloning · Multi-LLM · Runs 100% locally or on AWS.
 
 </div>
 
