@@ -298,9 +298,21 @@ class ConnectionManager:
         if task and not task.done():
             task.cancel()
 
-        self.active_connections.pop(session_id, None)
+        ws = self.active_connections.pop(session_id, None)
         self.session_data.pop(session_id, None)
         self._send_locks.pop(session_id, None)
+
+        # Actually close the socket. Disconnect is also reached when the
+        # stale-session reaper or a REST "end session" tears a session down —
+        # without this, the client's connection stayed open with all its
+        # server-side state already gone (a zombie that ignored every input).
+        if ws is not None:
+            close = getattr(ws, "close", None)
+            if close is not None:
+                try:
+                    await close(code=1000)
+                except Exception:
+                    pass  # already closed by the peer
         # Best-effort wipe of the per-session temp dir. We use shutil.rmtree
         # via to_thread because rmtree on a large dir can briefly block.
         session_dir = TMPDIR / f"avatar-session-{session_id}"
@@ -752,9 +764,12 @@ class ConnectionManager:
                 ts = int(datetime.now(timezone.utc).timestamp() * 1000)
                 video_key = f"videos/{session_id}/{ts}_c{chunk_index}.mp4"
                 with span("storage.upload", **{"chunk": chunk_index}):
-                    video_url = await storage_service.upload_file(
+                    await storage_service.upload_file(
                         tmp_video.read_bytes(), video_key, content_type="video/mp4"
                     )
+                    # S3 objects are private — hand the client a URL it can
+                    # actually fetch (presigned on S3, /uploads/ locally).
+                    video_url = await storage_service.serving_url(video_key)
 
                 await self.send_message(
                     session_id,

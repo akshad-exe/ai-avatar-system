@@ -65,34 +65,56 @@ class STTService:
             await self.initialize()
         return await asyncio.to_thread(self._transcribe_sync, audio_data, language)
 
+    def _decode_with_soundfile(self, audio_data: Union[bytes, str]) -> np.ndarray:
+        """Fallback decoder for formats PyAV chokes on (raw WAV/FLAC/OGG)."""
+        if isinstance(audio_data, bytes):
+            audio, sample_rate = sf.read(io.BytesIO(audio_data))
+        else:
+            audio, sample_rate = sf.read(audio_data)
+
+        # Mono mixdown
+        if len(audio.shape) > 1:
+            audio = audio.mean(axis=1)
+
+        # Resample to 16 kHz (Whisper's expected rate)
+        if sample_rate != 16000:
+            import librosa
+
+            audio = librosa.resample(audio, orig_sr=sample_rate, target_sr=16000)
+
+        return audio.astype(np.float32)
+
     def _transcribe_sync(self, audio_data: Union[bytes, str], language: str) -> str:
         try:
-            if isinstance(audio_data, bytes):
-                audio, sample_rate = sf.read(io.BytesIO(audio_data))
-            else:
-                audio, sample_rate = sf.read(audio_data)
-
-            # Mono mixdown
-            if len(audio.shape) > 1:
-                audio = audio.mean(axis=1)
-
-            # Resample to 16 kHz (Whisper's expected rate)
-            if sample_rate != 16000:
-                import librosa
-
-                audio = librosa.resample(audio, orig_sr=sample_rate, target_sr=16000)
-
-            audio = audio.astype(np.float32)
-
             assert self.model is not None  # for type checker
-            segments, info = self.model.transcribe(
-                audio,
-                language=language,
-                beam_size=5,
-                vad_filter=True,
-                vad_parameters=dict(min_silence_duration_ms=500),
-            )
-            transcription = " ".join(seg.text for seg in segments).strip()
+
+            # Hand the path / raw bytes straight to faster-whisper: it decodes
+            # via PyAV, which handles the browser's WebM/Opus mic recordings
+            # (libsndfile can NOT — decoding with soundfile first broke every
+            # voice turn coming from MediaRecorder). PyAV also resamples to
+            # 16 kHz mono internally, so no librosa pass is needed.
+            source = io.BytesIO(audio_data) if isinstance(audio_data, bytes) else audio_data
+            try:
+                segments, info = self.model.transcribe(
+                    source,
+                    language=language,
+                    beam_size=5,
+                    vad_filter=True,
+                    vad_parameters=dict(min_silence_duration_ms=500),
+                )
+                transcription = " ".join(seg.text for seg in segments).strip()
+            except Exception as decode_err:
+                logger.warning(f"PyAV decode failed ({decode_err}); retrying via soundfile")
+                audio = self._decode_with_soundfile(audio_data)
+                segments, info = self.model.transcribe(
+                    audio,
+                    language=language,
+                    beam_size=5,
+                    vad_filter=True,
+                    vad_parameters=dict(min_silence_duration_ms=500),
+                )
+                transcription = " ".join(seg.text for seg in segments).strip()
+
             logger.info(f"Transcribed {len(transcription)} chars (lang={info.language})")
             return transcription
 

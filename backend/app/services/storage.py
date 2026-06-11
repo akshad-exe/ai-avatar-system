@@ -62,6 +62,10 @@ class LocalStorageService:
     def get_url(self, key: str) -> str:
         return _local_url(key)
 
+    async def serving_url(self, key: str, ttl_seconds: int = 3600) -> str:
+        """URL the browser can actually fetch. Local files are public at /uploads/."""
+        return _local_url(key)
+
     async def cleanup(self):
         logger.info("Local storage cleanup complete")
 
@@ -159,6 +163,16 @@ class S3StorageService:
         if self.cloudfront_domain:
             return f"https://{self.cloudfront_domain}/{key}"
         return f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/{key}"
+
+    async def serving_url(self, key: str, ttl_seconds: int = 3600) -> str:
+        """
+        URL the browser can actually fetch. Objects are uploaded with
+        ACL=private, so the raw bucket URL 403s — return CloudFront (which
+        has origin access) when configured, else a time-limited presigned URL.
+        """
+        if self.cloudfront_domain:
+            return f"https://{self.cloudfront_domain}/{key}"
+        return await self.presigned_url(key, ttl_seconds)
 
     async def cleanup(self):
         logger.info("S3 storage cleanup complete")
