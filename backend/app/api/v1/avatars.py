@@ -222,8 +222,11 @@ async def update_avatar_metadata(
     # PATCH semantics — omitted fields are left untouched, not nulled out).
     update_data = payload.model_dump(exclude_unset=True)
     try:
-        existing.update(update_data)
-        avatar.avatar_metadata = existing
+        # Assign a NEW dict — mutating the ORM-held dict in place and
+        # re-assigning the same object defeats SQLAlchemy's change detection
+        # (old is new → no UPDATE emitted), so the metadata silently never
+        # persisted even though the endpoint returned 200.
+        avatar.avatar_metadata = {**existing, **update_data}
         await db.commit()
         await db.refresh(avatar)
         logger.info(f"Avatar {avatar_id} metadata updated: {list(update_data.keys())}")

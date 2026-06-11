@@ -128,3 +128,42 @@ def test_settings_accepts_comma_separated_lists():
     assert Settings._split_comma_separated(["already", "a-list"]) == ["already", "a-list"]
     # Trailing comma / stray whitespace shouldn't produce empty entries
     assert Settings._split_comma_separated("jpg, png,") == ["jpg", "png"]
+
+
+async def test_avatar_metadata_patch_actually_persists(
+    client: AsyncClient, db_session, test_user, auth_headers
+):
+    """PATCH /avatars/{id}/metadata must survive a round-trip to the DB.
+
+    The endpoint used to mutate the ORM-held JSON dict in place and reassign
+    the same object — SQLAlchemy detected no change and emitted no UPDATE, so
+    the personality editor showed "Saved" while persisting nothing.
+    """
+    avatar = Avatar(
+        user_id=test_user.id,
+        name="Meta Avatar",
+        image_url="http://x/i.jpg",
+        s3_key="avatars/x/image.jpg",
+        status="ready",
+        avatar_metadata={"face_detected": True},
+    )
+    db_session.add(avatar)
+    await db_session.commit()
+    await db_session.refresh(avatar)
+
+    resp = await client.patch(
+        f"/api/v1/avatars/{avatar.id}/metadata",
+        json={"system_prompt": "You are a pirate."},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    # Drop all in-memory ORM state and reload from the database — the bug is
+    # only visible across a real round-trip (the identity map hid it).
+    avatar_id = avatar.id  # capture before expire_all (sync lazy-load would fail)
+    db_session.expire_all()
+    result = await db_session.execute(select(Avatar).where(Avatar.id == avatar_id))
+    fresh = result.scalar_one()
+    assert (fresh.avatar_metadata or {}).get("system_prompt") == "You are a pirate."
+    # And the pre-existing keys were merged, not clobbered
+    assert (fresh.avatar_metadata or {}).get("face_detected") is True
