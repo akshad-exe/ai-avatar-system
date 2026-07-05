@@ -1,36 +1,50 @@
-FROM node:18-alpine
-
+# Stage 1: Build dependency graph and compile frontend
+FROM node:20.11-alpine AS builder
 WORKDIR /app
 
-# NEXT_PUBLIC_* values are inlined into the client bundle AT BUILD TIME —
-# setting them only as runtime env on the container has no effect on the
-# already-compiled JS. Accept them as build args (compose passes them via
-# build.args) and export as ENV so `npm run build` sees them.
+# Copy dependency configs
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# Copy application code
+COPY . .
+
+# Set build arguments for inlining env vars
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ARG NEXT_PUBLIC_WS_URL=ws://localhost:8000
 ARG NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ARG NEXT_PUBLIC_S3_BUCKET_DOMAIN=
 ARG NEXT_PUBLIC_CLOUDFRONT_DOMAIN=
+
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL \
     NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL \
     NEXT_PUBLIC_S3_BUCKET_DOMAIN=$NEXT_PUBLIC_S3_BUCKET_DOMAIN \
     NEXT_PUBLIC_CLOUDFRONT_DOMAIN=$NEXT_PUBLIC_CLOUDFRONT_DOMAIN
 
-# Copy package files
-COPY package.json package-lock.json* ./
-
-# Install dependencies
-RUN npm ci
-
-# Copy application code
-COPY . .
-
-# Build application
+# Build application with output standalone
 RUN npm run build
 
-# Expose port
-EXPOSE 3000
+# Stage 2: Minimal runtime environment
+FROM node:20.11-alpine AS runner
+WORKDIR /app
 
-# Start application
-CMD ["npm", "start"]
+ENV NODE_ENV=production
+
+# Don't run as root for security
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy only the compiled standalone app and assets
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Run the standalone Node app (much faster, no devDependencies or build tools)
+CMD ["node", "server.js"]

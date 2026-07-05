@@ -32,9 +32,7 @@ python-socketio==5.11.0
 # and the cache_control parameter used in app/services/llm.py
 anthropic>=0.45.0
 openai>=1.50.0
-torch==2.2.0
-torchvision==0.17.0
-torchaudio==2.2.0
+
 transformers==4.37.2
 accelerate==0.26.1
 diffusers==0.32.2
@@ -49,10 +47,6 @@ scipy==1.12.0
 faster-whisper>=1.0.0
 
 # TTS
-# Chatterbox by Resemble AI — fastest open-source TTS w/ voice cloning + 23 langs
-# (en, es, fr, de, it, pt, pl, tr, ru, nl, ar, zh, ja, ko, da, el, fi, he, hi,
-# ms, no, sv, sw). Replaces deprecated Coqui XTTS v2.
-chatterbox-tts>=0.1.4
 # Edge TTS — free Microsoft neural voices used as the first fallback when
 # Chatterbox is unavailable (no API key, no GPU). gTTS remains the last resort.
 edge-tts>=6.1.0

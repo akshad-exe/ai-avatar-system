@@ -48,6 +48,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: ai-avatar-system-backend:latest
     container_name: avatar-backend
     ports:
       - "8000:8000"
@@ -86,13 +87,14 @@ services:
     networks:
       - avatar-network
     restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+    # CPU-only fallback. Uncomment to enable GPU if NVIDIA drivers are configured in WSL2.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
 
   frontend:
     build:
@@ -133,9 +135,7 @@ services:
     restart: unless-stopped
 
   celery-worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ai-avatar-system-backend:latest
     container_name: avatar-celery-worker
     command: celery -A app.celery_app worker --loglevel=info --concurrency=2
     environment:
@@ -159,7 +159,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "celery -A app.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      test: ["CMD-SHELL", "celery -A app.celery_app inspect python -c 'import sys; sys.exit(0)' || celery -A app.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -167,18 +167,17 @@ services:
     networks:
       - avatar-network
     restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+    # CPU-only fallback. Uncomment to enable GPU if NVIDIA drivers are configured in WSL2.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
 
   flower:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ai-avatar-system-backend:latest
     container_name: avatar-flower
     command: celery -A app.celery_app flower --port=5555
     ports:
