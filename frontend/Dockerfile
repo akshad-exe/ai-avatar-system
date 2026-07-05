@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Copy dependency configs
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # Copy application code
 COPY . .
