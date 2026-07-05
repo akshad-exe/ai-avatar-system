@@ -8,6 +8,7 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # Copy application code
 COPY . .
+RUN mkdir -p public
 
 # Set build arguments for inlining env vars
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
